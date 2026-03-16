@@ -1,0 +1,19 @@
+CLAUDE.md
+
+# Vivado generated
+*.cache/
+*.hw/
+*.ip_user_files/
+*.sim/
+*.runs/
+*.gen/
+*.srcs/
+*.xpr
+sim_out
+*.vcd
+*.out
+
+# Simulation build artifacts
+sim/*_out
+sim/*.vcd
+tb_spi_master.vcd
