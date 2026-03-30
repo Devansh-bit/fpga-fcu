@@ -81,6 +81,75 @@ module fcu_top (
         .init_fail(init_fail)
     );
 
+    // Shared microsecond timestamp
+    wire [31:0] timestamp_us;
+
+    timestamp_gen #(
+        .CLK_FREQ(100_000_000)
+    ) u_ts (
+        .clk(CLK100MHZ),
+        .rst(rst),
+        .timestamp_us(timestamp_us)
+    );
+
+    // IMU sensor port adapter
+    wire [95:0] imu_port_data;
+    wire [3:0]  imu_port_sensor_type;
+    wire [31:0] imu_port_timestamp;
+    wire        imu_port_valid;
+
+    imu_sensor_port #(
+        .DATA_WIDTH(96),
+        .TS_WIDTH(32)
+    ) u_imu_port (
+        .clk(CLK100MHZ),
+        .rst(rst),
+        .accel_x(accel_x),
+        .accel_y(accel_y),
+        .accel_z(accel_z),
+        .gyro_x(gyro_x),
+        .gyro_y(gyro_y),
+        .gyro_z(gyro_z),
+        .data_valid(data_valid),
+        .timestamp_us(timestamp_us),
+        .port_data(imu_port_data),
+        .port_sensor_type(imu_port_sensor_type),
+        .port_timestamp(imu_port_timestamp),
+        .port_valid(imu_port_valid)
+    );
+
+    // Sensor hub (single port for now, outputs consumed by future fusion core)
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire [95:0] hub_out_data;
+    wire [3:0]  hub_out_sensor_type;
+    wire [31:0] hub_out_timestamp;
+    wire        hub_out_valid;
+    wire        hub_fifo_empty;
+    /* verilator lint_on UNUSEDSIGNAL */
+    wire        hub_fifo_overflow;
+
+    sensor_hub #(
+        .N_PORTS(1),
+        .DATA_WIDTH(96),
+        .TS_WIDTH(32),
+        .FIFO_DEPTH(16)
+    ) u_hub (
+        .clk(CLK100MHZ),
+        .rst(rst),
+        .port_data(imu_port_data),
+        .port_sensor_type(imu_port_sensor_type),
+        .port_timestamp(imu_port_timestamp),
+        .port_valid(imu_port_valid),
+        .out_data(hub_out_data),
+        .out_sensor_type(hub_out_sensor_type),
+        .out_timestamp(hub_out_timestamp),
+        .out_valid(hub_out_valid),
+        .out_ready(1'b1),
+        .fusion_en(1'b1),
+        .fifo_empty(hub_fifo_empty),
+        .fifo_overflow(hub_fifo_overflow)
+    );
+
     // UART telemetry: hex dump of all sensor values at 115200 baud
     imu_uart_fmt #(
         .CLK_FREQ(100_000_000),
@@ -133,6 +202,6 @@ module fcu_top (
     end
     pwm #(.WIDTH(8)) pwm_rgb3_g (.clk(CLK100MHZ), .duty(dv_stretch[21:14]), .out(led3_g));
     assign led3_r = 1'b0;
-    assign led3_b = 1'b0;
+    assign led3_b = hub_fifo_overflow;
 
 endmodule

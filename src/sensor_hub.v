@@ -36,7 +36,9 @@ module sensor_hub #(
     // Per-port FIFO signals
     wire [FIFO_WIDTH-1:0] fifo_rd_data  [0:N_PORTS-1];
     wire [N_PORTS-1:0]    fifo_empty_i;
+    /* verilator lint_off UNUSEDSIGNAL */
     wire [N_PORTS-1:0]    fifo_full_i;
+    /* verilator lint_on UNUSEDSIGNAL */
     reg  [N_PORTS-1:0]    fifo_rd_en;
 
     genvar gi;
