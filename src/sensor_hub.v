@@ -68,10 +68,11 @@ module sensor_hub #(
     assign fifo_empty = fifo_empty_i;
 
     // Round-robin arbiter
-    localparam ST_SCAN   = 1'b0;
-    localparam ST_OUTPUT = 1'b1;
+    localparam ST_SCAN    = 2'd0;
+    localparam ST_OUTPUT  = 2'd1;
+    localparam ST_ADVANCE = 2'd2;
 
-    reg                    arb_state;
+    reg [1:0]              arb_state;
     reg [PORT_WIDTH-1:0]   last_served;
     reg [PORT_WIDTH-1:0]   sel_port;
 
@@ -118,25 +119,31 @@ module sensor_hub #(
 
             case (arb_state)
                 ST_SCAN: begin
-                    out_valid <= 1'b0;
                     if (next_found) begin
-                        fifo_rd_en[next_port] <= 1'b1;
-                        sel_port  <= next_port;
-                        arb_state <= ST_OUTPUT;
+                        // Capture FIFO head combinationally (before rd_ptr advances)
+                        out_data        <= fifo_rd_data[next_port][0 +: DATA_WIDTH];
+                        out_timestamp   <= fifo_rd_data[next_port][DATA_WIDTH +: TS_WIDTH];
+                        out_sensor_type <= fifo_rd_data[next_port][DATA_WIDTH + TS_WIDTH +: 4];
+                        out_valid       <= 1'b1;
+                        sel_port        <= next_port;
+                        arb_state       <= ST_OUTPUT;
+                    end else begin
+                        out_valid <= 1'b0;
                     end
                 end
 
                 ST_OUTPUT: begin
-                    // FIFO has combinational read; data is available now
-                    out_data        <= fifo_rd_data[sel_port][0 +: DATA_WIDTH];
-                    out_timestamp   <= fifo_rd_data[sel_port][DATA_WIDTH +: TS_WIDTH];
-                    out_sensor_type <= fifo_rd_data[sel_port][DATA_WIDTH + TS_WIDTH +: 4];
-                    out_valid       <= 1'b1;
-
                     if (out_ready) begin
+                        fifo_rd_en[sel_port] <= 1'b1;
                         last_served <= sel_port;
-                        arb_state   <= ST_SCAN;
+                        out_valid   <= 1'b0;
+                        arb_state   <= ST_ADVANCE;
                     end
+                end
+
+                ST_ADVANCE: begin
+                    // 1-cycle settle: FIFO rd_ptr updated, now safe to scan
+                    arb_state <= ST_SCAN;
                 end
 
                 default: arb_state <= ST_SCAN;
